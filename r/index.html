@@ -13,27 +13,29 @@
   - 앱이 없으면: 목록을 글로 보여 주고 설치 안내
 -->
 <style>
-  :root{--green:#33a466;--bg:#f7faf5;--text:#1f2a22;--sub:#5b6b60;--card:#fff}
-  @media (prefers-color-scheme: dark){:root{--bg:#121613;--text:#e6ede7;--sub:#a3b1a7;--card:#1c221e}}
-  body{margin:0;font-family:-apple-system,"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif;background:var(--bg);color:var(--text);line-height:1.6}
-  header{background:var(--green);color:#fff;padding:18px 20px 34px;border-radius:0 0 50% 50%/0 0 24px 24px}
-  header b{font-size:18px}
-  main{max-width:520px;margin:-18px auto 0;padding:0 16px 40px}
-  .card{background:var(--card);border-radius:18px;padding:18px;box-shadow:0 4px 16px rgba(0,0,0,.08)}
-  h1{font-size:20px;margin:0 0 4px}
+  :root{--paper:#f6f3ec;--ink:#222;--text:#333;--sub:#6b665c;--line:#cfc9bc;--green:#2e8b57;--mark:#bfe6c8}
+  @media (prefers-color-scheme: dark){:root{--paper:#1c1a16;--ink:#f1ece2;--text:#ddd6c9;--sub:#a59e90;--line:#3d382f;--green:#5cc08a;--mark:rgba(92,192,138,.33)}}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif;background:var(--paper);color:var(--text);line-height:1.6;word-break:keep-all}
+  header{max-width:520px;margin:0 auto;padding:20px 20px 0;display:flex;align-items:center;gap:10px}
+  header b{font-size:17px;color:var(--ink)}
+  main{max-width:520px;margin:0 auto;padding:28px 20px 40px}
+  .card{border-top:3px solid var(--ink);padding-top:18px}
+  h1{font-size:26px;color:var(--ink);letter-spacing:-.5px;margin:0 0 4px}
   .memo{color:var(--sub);font-size:14px;margin:0 0 10px}
-  ul{list-style:none;padding:0;margin:0}
-  li{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid rgba(0,0,0,.07)}
+  ul{list-style:none;padding:0;margin:8px 0 0;border-top:1.5px solid var(--line)}
+  li{display:flex;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1.5px solid var(--line)}
+  li span:first-child{color:var(--ink)}
   li span:last-child{color:var(--sub)}
-  .btn{display:block;text-align:center;text-decoration:none;font-weight:700;border-radius:14px;padding:14px;margin-top:14px}
-  .primary{background:var(--green);color:#fff}
-  .ghost{border:1.5px solid var(--green);color:var(--green)}
-  .note{color:var(--sub);font-size:13px;margin-top:14px}
+  .btn{display:block;text-align:center;text-decoration:none;font-weight:700;border-radius:12px;padding:14px;margin-top:14px}
+  .primary{background:var(--ink);color:var(--paper);margin-top:22px}
+  .ghost{border:2px solid var(--ink);color:var(--ink)}
+  .note{color:var(--sub);font-size:13px;margin-top:16px}
   .err{color:#c62828}
 </style>
 </head>
 <body>
-<header><b>🛒 오늘 장보기</b></header>
+<header><img src="../img/icon.png" alt="" width="30" height="30" style="border-radius:8px"><b>오늘 장보기</b></header>
 <main>
   <div class="card" id="box">
     <h1 id="title">받은 바구니</h1>
