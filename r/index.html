@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>오늘 장보기 — 받은 바구니</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="../img/icon.png">
+<!--
+  공유 링크 페이지: 카톡의 「앱에서 바로 받기」 링크(…/r/#코드)를 누르면 열림.
+  - 목록 코드는 주소의 # 뒤에만 있어서 이 페이지(서버)로 전송되지 않음 (브라우저 안에서만 읽음)
+  - 안드로이드: 오늘 장보기 앱을 열어 받은 바구니에 담기 (todaycart://receive?c=코드)
+  - 앱이 없으면: 목록을 글로 보여 주고 설치 안내
+-->
+<style>
+  :root{--green:#33a466;--bg:#f7faf5;--text:#1f2a22;--sub:#5b6b60;--card:#fff}
+  @media (prefers-color-scheme: dark){:root{--bg:#121613;--text:#e6ede7;--sub:#a3b1a7;--card:#1c221e}}
+  body{margin:0;font-family:-apple-system,"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif;background:var(--bg);color:var(--text);line-height:1.6}
+  header{background:var(--green);color:#fff;padding:18px 20px 34px;border-radius:0 0 50% 50%/0 0 24px 24px}
+  header b{font-size:18px}
+  main{max-width:520px;margin:-18px auto 0;padding:0 16px 40px}
+  .card{background:var(--card);border-radius:18px;padding:18px;box-shadow:0 4px 16px rgba(0,0,0,.08)}
+  h1{font-size:20px;margin:0 0 4px}
+  .memo{color:var(--sub);font-size:14px;margin:0 0 10px}
+  ul{list-style:none;padding:0;margin:0}
+  li{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid rgba(0,0,0,.07)}
+  li span:last-child{color:var(--sub)}
+  .btn{display:block;text-align:center;text-decoration:none;font-weight:700;border-radius:14px;padding:14px;margin-top:14px}
+  .primary{background:var(--green);color:#fff}
+  .ghost{border:1.5px solid var(--green);color:var(--green)}
+  .note{color:var(--sub);font-size:13px;margin-top:14px}
+  .err{color:#c62828}
+</style>
+</head>
+<body>
+<header><b>🛒 오늘 장보기</b></header>
+<main>
+  <div class="card" id="box">
+    <h1 id="title">받은 바구니</h1>
+    <p class="memo" id="memo"></p>
+    <ul id="items"></ul>
+    <a class="btn primary" id="open" href="#">오늘 장보기 앱에서 받기</a>
+    <a class="btn ghost" id="install" href="https://play.google.com/store/apps/details?id=kr.usefullab.todaycart">앱 설치하기 (Google Play)</a>
+    <p class="note">앱이 있으면 「앱에서 받기」를 누르면 받은 바구니에 바로 담겨요.<br>목록 내용은 이 링크 안에만 있고, 어디에도 저장되지 않아요.</p>
+  </div>
+</main>
+<script>
+(function () {
+  var PKG = 'kr.usefullab.todaycart';
+  var PLAY = 'https://play.google.com/store/apps/details?id=' + PKG;
+  var code = (location.hash || '').replace(/^#/, '').trim();
+  var box = document.getElementById('box');
+
+  function decode(c) {
+    var b64 = c.replace(/-/g, '+').replace(/_/g, '/');
+    while (b64.length % 4) b64 += '=';
+    var bin = atob(b64);
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return JSON.parse(new TextDecoder('utf-8').decode(bytes));
+  }
+  function money(n) { return n.toLocaleString('ko-KR') + '원'; }
+
+  if (!code) {
+    box.innerHTML = '<h1>링크가 비어 있어요</h1><p class="err">보낸 사람에게 바구니를 다시 보내 달라고 해 주세요.</p>' +
+      '<a class="btn ghost" href="' + PLAY + '">오늘 장보기 설치하기</a>';
+    return;
+  }
+  var data;
+  try { data = decode(code); } catch (e) { data = null; }
+  if (!data || data.v !== 1 || !Array.isArray(data.i)) {
+    box.innerHTML = '<h1>읽을 수 없는 링크예요</h1><p class="err">링크가 잘렸을 수 있어요. 메시지 전체를 다시 받아 주세요.</p>';
+    return;
+  }
+
+  document.getElementById('title').textContent = (data.n || '받은 바구니') + ' (' + data.i.length + '개)';
+  document.title = '오늘 장보기 — ' + (data.n || '받은 바구니');
+  if (data.m) document.getElementById('memo').textContent = '메모: ' + data.m;
+  var ul = document.getElementById('items');
+  data.i.forEach(function (it) {
+    var li = document.createElement('li');
+    var a = document.createElement('span');
+    a.textContent = it.n + ' ' + (it.q || 1) + (it.u || '개');
+    var b = document.createElement('span');
+    b.textContent = it.p ? money(it.p) : '';
+    li.appendChild(a); li.appendChild(b); ul.appendChild(li);
+  });
+
+  // 안드로이드: intent 주소로 앱 열기 (앱이 없으면 플레이 스토어로)
+  var intentUrl = 'intent://receive?c=' + encodeURIComponent(code) +
+    '#Intent;scheme=todaycart;package=' + PKG +
+    ';S.browser_fallback_url=' + encodeURIComponent(PLAY) + ';end';
+  var isAndroid = /Android/i.test(navigator.userAgent);
+  var open = document.getElementById('open');
+  if (isAndroid) {
+    open.href = intentUrl;
+    // 처음 열렸을 때 한 번 자동으로 앱 열기 시도 (안 되면 버튼으로)
+    setTimeout(function () { location.href = intentUrl; }, 300);
+  } else {
+    open.style.display = 'none';
+    document.querySelector('.note').textContent =
+      '오늘 장보기는 안드로이드 앱이에요. 휴대폰에서 이 링크를 열면 앱에서 바로 받을 수 있어요.';
+  }
+})();
+</script>
+</body>
+</html>
