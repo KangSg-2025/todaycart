@@ -25,6 +25,10 @@ try {
   $env:DATA_GO_KR_KEY = $k.DATA_GO_KR_KEY
   $env:FOOD_SAFETY_KOREA_KEY = $k.FOOD_SAFETY_KOREA_KEY
 
+  # never wait forever on a stalled network (11/26 19:10 run hung in git fetch)
+  $env:GIT_TERMINAL_PROMPT = "0"
+  $env:GIT_HTTP_LOW_SPEED_LIMIT = "1000"
+  $env:GIT_HTTP_LOW_SPEED_TIME = "60"
   Set-Location $Repo
   git pull --rebase
 
