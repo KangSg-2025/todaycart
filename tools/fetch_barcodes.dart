@@ -52,7 +52,7 @@ Future<void> main(List<String> args) async {
   final full = args.contains('--full') || !versionFile.existsSync() || stale;
   // 낮(6~19시)에는 키당 하루 300번까지라 전체(약 260번)는 저녁에만
   final hour = DateTime.now().hour;
-  if (full && hour >= 6 && hour < 19) {
+  if (full && hour >= 6 && hour < 19 && !args.contains('--allow-day')) {
     stdout.writeln('낮(6~19시)에는 하루 300번 제한 — 바코드 전체 받기는 저녁 7시 이후에 해요. 이번엔 건너뜀.');
     return;
   }
@@ -86,14 +86,26 @@ Future<bool> _fetchAll(Map<String, List<String>> best) async {
   }
   var pages = (first.total + _page - 1) ~/ _page;
   if (_maxPages > 0 && _maxPages < pages) pages = _maxPages;
-  stdout.writeln('전체 받기: ${first.total}건 · $pages번 호출 (1시간에 $_perHour번씩)');
-  var calls = 1, failed = 0;
+
+  // 받은 쪽은 PC에 모아 둠 → 한도에 걸려 중간에 멈춰도 다음 실행 때 남은 쪽만 받음
+  final progress = _Progress(first.total);
+  final done = progress.load(best);
+  stdout.writeln(
+    '전체 받기: ${first.total}건 · $pages번 호출 (1시간에 $_perHour번씩)'
+    '${done.isEmpty ? '' : ' · 이미 받은 ${done.length}쪽은 건너뜀'}',
+  );
+
+  var calls = 1;
   var hourStart = DateTime.now();
-  for (var p = 0; p < pages; p++) {
+  final codes = <String, int>{};
+  var dailyLimit = false;
+
+  /// 한 쪽 받기. 받았으면 true
+  Future<bool> fetchPage(int p) async {
     if (calls >= _perHour) {
       final wait = const Duration(minutes: 61) - DateTime.now().difference(hourStart);
       if (wait > Duration.zero) {
-        stdout.writeln('  한도 쉬는 중 ${wait.inMinutes}분… ($p / $pages)');
+        stdout.writeln('  한도 쉬는 중 ${wait.inMinutes}분… (${done.length} / $pages)');
         await Future<void>.delayed(wait);
       }
       calls = 0;
@@ -103,23 +115,132 @@ Future<bool> _fetchAll(Map<String, List<String>> best) async {
     calls++;
     if (r.code == 'INFO-320') {
       // 시간 한도에 걸림 → 1시간 쉬고 같은 쪽 다시
-      stdout.writeln('  시간 한도 — 1시간 쉼 ($p / $pages)');
+      stdout.writeln('  시간 한도 — 1시간 쉼 (${done.length} / $pages)');
       await Future<void>.delayed(const Duration(minutes: 61));
       calls = 0;
       hourStart = DateTime.now();
       r = await _rows(p * _page + 1, (p + 1) * _page);
       calls++;
     }
-    if (r.rows.isEmpty) failed++;
+    if (r.rows.isEmpty) {
+      codes[r.code] = (codes[r.code] ?? 0) + 1;
+      // INFO-300: 하루 호출 수를 다 씀 → 오늘은 더 불러도 소용없음
+      if (r.code == 'INFO-300') dailyLimit = true;
+      return false;
+    }
     _merge(best, r.rows);
+    progress.save(p, r.rows);
+    done.add(p);
+    return true;
+  }
+
+  final failed = <int>[];
+  for (var p = 0; p < pages && !dailyLimit; p++) {
+    if (done.contains(p)) continue;
+    if (!await fetchPage(p)) failed.add(p);
     if ((p + 1) % 20 == 0 || p + 1 == pages) stdout.writeln('  ${p + 1} / $pages');
   }
-  if (failed > pages ~/ 20) {
-    // 많이 실패했으면 반쪽 데이터로 덮어쓰지 않음
-    stderr.writeln('실패한 호출이 많아요($failed/$pages). 파일을 바꾸지 않아요.');
+  // 실패한 쪽은 끝에서 한 번 더
+  if (failed.isNotEmpty && !dailyLimit) {
+    stdout.writeln('  실패한 ${failed.length}쪽 다시 받는 중…');
+    for (final p in [...failed]) {
+      if (dailyLimit) break;
+      if (await fetchPage(p)) failed.remove(p);
+    }
+  }
+
+  final missing = [for (var p = 0; p < pages; p++) if (!done.contains(p)) p];
+  if (codes.isNotEmpty) {
+    // 왜 실패했는지 기록에 남김 (INFO-300 하루 한도 · INFO-320 시간 한도 · FAIL 응답 없음 …)
+    stdout.writeln('  실패 이유: ${codes.entries.map((e) => '${e.key} ${e.value}번').join(' · ')}');
+  }
+  if (missing.isNotEmpty) {
+    stdout.writeln(
+      '  아직 ${missing.length}쪽 남음${dailyLimit ? ' (하루 한도)' : ''} — '
+      '받은 ${done.length}쪽은 저장해 뒀고, 다음 실행 때 남은 쪽만 받아요. 홈페이지 파일은 아직 안 바꿔요.',
+    );
     return false;
   }
+  progress.clear();
   return true;
+}
+
+/// 전체 받기 중간 저장: %USERPROFILE%\.todaycart\barcode_progress\ (저장소 밖, 키 없음)
+/// - 쪽마다 p000.json … (그 쪽에서 쓸 값만)
+/// - 전체 건수가 바뀌었거나 3일 넘게 지난 것은 버리고 처음부터
+class _Progress {
+  _Progress(this.total)
+      : dir = Directory(
+          '${Platform.environment['USERPROFILE'] ?? Platform.environment['HOME'] ?? '.'}'
+          '/.todaycart/barcode_progress',
+        );
+
+  final int total;
+  final Directory dir;
+
+  File get _meta => File('${dir.path}/meta.json');
+  File _pageFile(int p) => File('${dir.path}/p${p.toString().padLeft(3, '0')}.json');
+
+  /// 저장해 둔 쪽을 [best]에 합치고, 받은 쪽 번호를 돌려줌
+  Set<int> load(Map<String, List<String>> best) {
+    final done = <int>{};
+    try {
+      if (!_meta.existsSync()) return done;
+      final m = jsonDecode(_meta.readAsStringSync()) as Map;
+      final started = DateTime.tryParse('${m['started']}');
+      if (m['total'] != total || started == null ||
+          DateTime.now().difference(started).inDays > 3) {
+        clear();
+        return done;
+      }
+      for (final f in dir.listSync().whereType<File>()) {
+        final name = f.uri.pathSegments.last;
+        final mm = RegExp(r'^p(\d{3})\.json$').firstMatch(name);
+        if (mm == null) continue;
+        final rows = (jsonDecode(f.readAsStringSync()) as List)
+            .map((r) => (r as Map).cast<String, Object?>())
+            .toList();
+        _merge(best, rows);
+        done.add(int.parse(mm.group(1)!));
+      }
+    } catch (_) {
+      // 깨진 중간 파일이면 처음부터
+      clear();
+      done.clear();
+      best.clear();
+    }
+    return done;
+  }
+
+  void save(int p, List<Map<String, Object?>> rows) {
+    try {
+      if (!dir.existsSync()) dir.createSync(recursive: true);
+      if (!_meta.existsSync()) {
+        _meta.writeAsStringSync(jsonEncode({
+          'total': total,
+          'started': DateTime.now().toIso8601String(),
+        }));
+      }
+      // 쓰는 칸만 남겨 작게
+      final slim = [
+        for (final r in rows)
+          {
+            'BAR_CD': r['BAR_CD'],
+            'PRDLST_NM': r['PRDLST_NM'],
+            'BSSH_NM': r['BSSH_NM'],
+            'CLSBIZ_DT': r['CLSBIZ_DT'],
+            'PRMS_DT': r['PRMS_DT'],
+          },
+      ];
+      _pageFile(p).writeAsStringSync(jsonEncode(slim));
+    } catch (_) {}
+  }
+
+  void clear() {
+    try {
+      if (dir.existsSync()) dir.deleteSync(recursive: true);
+    } catch (_) {}
+  }
 }
 
 /// 매주: 최근 7일 바뀐 것만 받아 합치기
@@ -267,7 +388,7 @@ Future<_Page> _rows(int start, int end, {String? chng}) async {
       await Future<void>.delayed(Duration(seconds: attempt * 3));
     }
   }
-  stderr.writeln('  실패: ${url.replaceAll(_key, '<key>').split('/C005/').last}');
+  stdout.writeln('  실패: ${url.replaceAll(_key, '<key>').split('/C005/').last}');
   return const _Page(0, [], 'FAIL', '응답 없음');
 }
 
