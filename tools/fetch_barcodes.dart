@@ -50,6 +50,12 @@ Future<void> main(List<String> args) async {
     if (stale) stdout.writeln('마지막 갱신이 오래돼서 전체를 다시 받아요 (약 3시간)');
   }
   final full = args.contains('--full') || !versionFile.existsSync() || stale;
+  // 낮(6~19시)에는 키당 하루 300번까지라 전체(약 260번)는 저녁에만
+  final hour = DateTime.now().hour;
+  if (full && hour >= 6 && hour < 19) {
+    stdout.writeln('낮(6~19시)에는 하루 300번 제한 — 바코드 전체 받기는 저녁 7시 이후에 해요. 이번엔 건너뜀.');
+    return;
+  }
   // 시험용: --pages=3 이면 앞의 3쪽(3,000건)만
   _maxPages = int.tryParse(
         args.where((a) => a.startsWith('--pages=')).map((a) => a.substring(8)).firstOrNull ?? '',

@@ -38,8 +38,8 @@ try {
     dart run tools/fetch_barcodes.dart barcodes
   }
 
-  git add prices barcodes
-  git diff --cached --quiet -- prices barcodes ':!barcodes/version.json'
+  foreach ($d in 'prices', 'barcodes') { if (Test-Path $d) { git add $d } }
+  git diff --cached --quiet -- . ':!barcodes/version.json'
   if ($LASTEXITCODE -ne 0) {
     git commit -m "update prices and barcodes"
     git push

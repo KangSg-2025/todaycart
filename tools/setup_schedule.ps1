@@ -30,10 +30,10 @@ if (-not $ok) { Write-Host "`n위 [없음]을 해결한 뒤 다시 실행하세�
 $script = Join-Path $Repo 'tools\update_data.ps1'
 $arg = "-NoProfile -ExecutionPolicy Bypass -File `"$script`""
 $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arg -WorkingDirectory $Repo
-$trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Sunday -At 10am
+$trigger = New-ScheduledTaskTrigger -Daily -At 9pm
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Hours 5)
 Register-ScheduledTask -TaskName 'TodayCart data update' -Action $action -Trigger $trigger -Settings $settings -Force | Out-Null
-Write-Host "`n[OK] 매주 일요일 오전 10시 자동 실행 등록 (작업 스케줄러: TodayCart data update)" -ForegroundColor Green
+Write-Host "`n[OK] 매일 밤 9시 자동 실행 등록 (작업 스케줄러: TodayCart data update)" -ForegroundColor Green
 
 if ($RunNow) {
   Write-Host '바코드 전체 첫 받기를 새 창에서 시작합니다 (약 3시간, 창을 닫지 마세요).'
