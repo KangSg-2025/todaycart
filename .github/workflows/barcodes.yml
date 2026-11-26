@@ -1,1 +1,49 @@
+# 바코드 상품 이름 자료 갱신 (식품안전나라 바코드연계제품정보 → barcodes/000~999.json)
+# - 처음 한 번(barcodes/ 가 없을 때): 전체 약 26만 건을 받음. API가 「1시간에 100번」까지라 약 3시간 걸림.
+# - 그다음부터 매주 토요일: 최근 7일 바뀐 것만 받아 합침 (몇 초)
+#   ※ 바뀐 것만 받는 기능은 「최근 7일」까지만 돼서 매주 돌려야 빠짐없음
+# - 앱은 처음 찍는 바코드의 끝 3자리 파일 하나(약 4KB)만 받음
+# - 인증키: 저장소 Settings › Secrets and variables › Actions › FOOD_SAFETY_KOREA_KEY
+# - 직접 돌리기: Actions 탭 › 바코드 자료 갱신 › Run workflow (전체 다시 받기 체크 가능)
+name: 바코드 자료 갱신
 
+on:
+  schedule:
+    - cron: '0 5 * * 6'
+  workflow_dispatch:
+    inputs:
+      full:
+        description: '전체 다시 받기 (약 3시간)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: barcodes
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+      - name: 바코드 자료 받기 · 나누기
+        env:
+          FOOD_SAFETY_KOREA_KEY: ${{ secrets.FOOD_SAFETY_KOREA_KEY }}
+        run: dart run tools/fetch_barcodes.dart barcodes ${{ inputs.full && '--full' || '' }}
+      - name: 바뀌었으면 올리기
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add barcodes
+          if git diff --cached --quiet -- barcodes ':!barcodes/version.json'; then
+            echo "바뀐 바코드 없음"
+            exit 0
+          fi
+          git commit -m "바코드 자료 갱신"
+          git pull --rebase
+          git push
