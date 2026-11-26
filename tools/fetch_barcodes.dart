@@ -58,7 +58,13 @@ Future<void> main(List<String> args) async {
 
 /// 처음: 전체 받기 (1시간 95번씩 쉬어 가며)
 Future<bool> _fetchAll(Map<String, List<String>> best) async {
-  final first = await _rows(1, 1);
+  var first = await _rows(1, 1);
+  // 시작하자마자 시간 한도(같은 키를 다른 곳에서 막 썼을 때)면 1시간 쉬고 다시
+  for (var i = 0; i < 2 && first.code == 'INFO-320'; i++) {
+    stdout.writeln('  시간 한도 — 1시간 쉬고 시작해요');
+    await Future<void>.delayed(const Duration(minutes: 61));
+    first = await _rows(1, 1);
+  }
   if (first.total <= 0) {
     stderr.writeln('전체 건수를 받지 못했어요: ${first.msg}');
     return false;
