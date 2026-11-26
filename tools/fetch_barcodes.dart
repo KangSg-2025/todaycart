@@ -40,7 +40,16 @@ Future<void> main(List<String> args) async {
     orElse: () => 'build/barcodes',
   );
   final versionFile = File('$outDir/version.json');
-  final full = args.contains('--full') || !versionFile.existsSync();
+  // 마지막 갱신이 7일 넘게 지났으면(PC를 오래 안 켬) 「최근 7일」로는 빠지는 게 생김 → 전체 다시
+  var stale = false;
+  if (versionFile.existsSync()) {
+    final last = DateTime.tryParse(
+      '${(jsonDecode(versionFile.readAsStringSync()) as Map)['updated']}',
+    );
+    stale = last == null || DateTime.now().difference(last).inDays > 7;
+    if (stale) stdout.writeln('마지막 갱신이 오래돼서 전체를 다시 받아요 (약 3시간)');
+  }
+  final full = args.contains('--full') || !versionFile.existsSync() || stale;
   // 시험용: --pages=3 이면 앞의 3쪽(3,000건)만
   _maxPages = int.tryParse(
         args.where((a) => a.startsWith('--pages=')).map((a) => a.substring(8)).firstOrNull ?? '',
